@@ -487,7 +487,17 @@
           } catch (error) {
             console.error("Import failed: ", error);
           }
+        },
+        checkUrlForSchema() {
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.has('schemaUrl')) {
+            this.schemaUrl = urlParams.get('schemaUrl');
+            this.doImport();
+          }
         }
+      },
+      created() {
+        this.checkUrlForSchema();
       }
     });
 
