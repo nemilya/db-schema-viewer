@@ -10,5 +10,5 @@ Demo: https://nemilya.github.io/db-schema-viewer/
 Todo:
 
 - [x] initial working version
-- [ ] loading ActiveRecord schema
+- [x] loading ActiveRecord schema
 

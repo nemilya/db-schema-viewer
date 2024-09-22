@@ -42,6 +42,69 @@
       color: #ecf0f1;
     }
 
+    .import-button {
+      position: absolute;
+      top: 60px;
+      right: 20px;
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .import-area {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .import-container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    textarea {
+      width: 100%;
+      height: 200px;
+      margin-bottom: 10px;
+      font-family: inherit;
+      resize: none;
+    }
+
+    .button-group {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .cancel-button,
+    .do-import-button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+    }
+
+    .cancel-button {
+      background-color: #f44336;
+    }
+
+    .do-import-button {
+      background-color: #4CAF50;
+    }
+
     .columns {
       display: flex;
       justify-content: space-between;
@@ -114,58 +177,49 @@
     }
   </style>
 </head>
+
 <body>
   <div id="app">
     <div @click="toggleTheme" class="theme-toggle">
       Switch to {{ isDayMode ? 'Night' : 'Day' }} Mode
     </div>
+    <button @click="showImportArea = true" class="import-button">Import</button>
+    <div v-if="showImportArea" class="import-area">
+      <div class="import-container">
+        <textarea v-model="importText" placeholder="Paste your ActiveRecord schema here..."></textarea>
+        <div class="button-group">
+          <button @click="cancelImport" class="cancel-button">Cancel</button>
+          <button @click="doImport" class="do-import-button">Do Import</button>
+        </div>
+      </div>
+    </div>
     <div class="columns">
-      <generic-column 
-        class="column" 
-        v-if="selectedTable" 
-        :title="'Tables Referenced By ' + selectedTable.name" 
-        :tables="referencedTables" 
-        :mouseover-table="mouseoverTable" 
-        :mouseover-column="mouseoverColumn" 
-        @select="selectTable" 
-        @update-mouseover-table="updateMouseoverTable" 
+      <generic-column class="column" v-if="selectedTable" :title="'Tables Referenced By ' + selectedTable.name"
+        :tables="referencedTables" :mouseover-table="mouseoverTable" :mouseover-column="mouseoverColumn"
+        @select="selectTable" @update-mouseover-table="updateMouseoverTable"
         @update-mouseover-column="updateMouseoverColumn">
       </generic-column>
-      
+
       <div class="column column-center">
         <div v-if="!selectedTable">
           <div>
-            <input type="text" placeholder="Search for a table..." v-model="searchQuery" @input="updateSearchQuery(searchQuery)" />
+            <input type="text" placeholder="Search for a table..." v-model="searchQuery"
+              @input="updateSearchQuery(searchQuery)" />
           </div>
-          <generic-column
-            title="All Tables"
-            :tables="filteredTables"
-            :mouseover-table="mouseoverTable"
-            :mouseover-column="mouseoverColumn"
-            @select="selectTable"
-            @update-mouseover-table="updateMouseoverTable"
+          <generic-column title="All Tables" :tables="filteredTables" :mouseover-table="mouseoverTable"
+            :mouseover-column="mouseoverColumn" @select="selectTable" @update-mouseover-table="updateMouseoverTable"
             @update-mouseover-column="updateMouseoverColumn" />
         </div>
         <div v-else>
           <button class="return-button" @click="clearSelection">Return to All Tables</button>
-          <table-list
-            :table="selectedTable"
-            :mouseover-table="mouseoverTable"
-            :mouseover-column="mouseoverColumn"
-            @update-mouseover-table="updateMouseoverTable"
-            @update-mouseover-column="updateMouseoverColumn" />
+          <table-list :table="selectedTable" :mouseover-table="mouseoverTable" :mouseover-column="mouseoverColumn"
+            @update-mouseover-table="updateMouseoverTable" @update-mouseover-column="updateMouseoverColumn" />
         </div>
       </div>
 
-      <generic-column 
-        class="column" 
-        v-if="selectedTable"
-        :title="'Tables Referencing ' + selectedTable.name"
-        :tables="referencingTables"
-        :mouseover-table="mouseoverTable"
-        :mouseover-column="mouseoverColumn"
-        @select="selectTable"
-        @update-mouseover-table="updateMouseoverTable"
+      <generic-column class="column" v-if="selectedTable" :title="'Tables Referencing ' + selectedTable.name"
+        :tables="referencingTables" :mouseover-table="mouseoverTable" :mouseover-column="mouseoverColumn"
+        @select="selectTable" @update-mouseover-table="updateMouseoverTable"
         @update-mouseover-column="updateMouseoverColumn">
       </generic-column>
     </div>
@@ -310,7 +364,9 @@
         isDayMode: getInitialMode(),
         selectedTable: null,
         mouseoverTable: null,
-        mouseoverColumn: null
+        mouseoverColumn: null,
+        showImportArea: false,
+        importText: ''
       },
       computed: {
         filteredTables() {
@@ -354,6 +410,61 @@
         clearMouseover() {
           this.mouseoverTable = null;
           this.mouseoverColumn = null;
+        },
+        cancelImport() {
+          this.showImportArea = false;
+          this.importText = '';
+        },
+        doImport() {
+            try {
+                const lines = this.importText.split('\n');
+                const newTables = [];
+                const newRelationships = [];
+                let currentTable = null;
+
+                lines.forEach(line => {
+                    line = line.trim();
+
+                    if (line.startsWith('create_table')) {
+                        const tableName = line.match(/"([^"]+)"/)[1];
+                        currentTable = { name: tableName, columns: [] };
+                        newTables.push(currentTable);
+                    } else if (line.startsWith('t.')) {
+                        const columnMatches = line.match(/t\.(\w+) "(\w+)"/);
+                        if (columnMatches) {
+                            const [, type, name] = columnMatches;
+                            currentTable.columns.push({ name, type });
+                        }
+                    } else if (line.startsWith('add_foreign_key')) {
+                        const fkMatches = line.match(/add_foreign_key "([^"]+)", "([^"]+)"(?:, column: "([^"]+)")?/);
+                        if (fkMatches) {
+                            const [, fromTable, toTable, column] = fkMatches;
+                            const fkColumn = column ? column : `${toTable.slice(0, -1)}_id`; // Default to convention `tablename_id` if column not specified
+
+                            newRelationships.push({
+                                from: { table: toTable, column: 'id' }, // references `id` in the table it points to
+                                to: { table: fromTable, column: fkColumn } // the actual column in fromTable
+                            });
+
+                            const fromTableObject = newTables.find(t => t.name === fromTable);
+                            if (fromTableObject) {
+                                const columnObject = fromTableObject.columns.find(c => c.name === fkColumn);
+                                if (columnObject) {
+                                    columnObject.foreignKey = true;
+                                    columnObject.references = { table: toTable, column: 'id' };
+                                }
+                            }
+                        }
+                    }
+                });
+
+                this.tables = newTables;
+                this.relationships = newRelationships;
+                this.showImportArea = false;
+                this.importText = '';
+            } catch (error) {
+                console.error("Import failed: ", error);
+            }
         }
       }
     });
@@ -366,5 +477,6 @@
     document.body.className = getInitialMode() ? 'day-mode' : 'night-mode';
   </script>
 </body>
+
 </html>
 
