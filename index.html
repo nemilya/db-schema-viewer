@@ -187,6 +187,7 @@
     <div v-if="showImportArea" class="import-area">
       <div class="import-container">
         <textarea v-model="importText" placeholder="Paste your ActiveRecord schema here..."></textarea>
+        <input type="text" v-model="schemaUrl" placeholder="OR Enter Schema URL here..." style="width: 100%; margin-bottom: 10px;" />
         <div class="button-group">
           <button @click="cancelImport" class="cancel-button">Cancel</button>
           <button @click="doImport" class="do-import-button">Do Import</button>
@@ -366,7 +367,8 @@
         mouseoverTable: null,
         mouseoverColumn: null,
         showImportArea: false,
-        importText: ''
+        importText: '',
+        schemaUrl: ''
       },
       computed: {
         filteredTables() {
@@ -414,57 +416,77 @@
         cancelImport() {
           this.showImportArea = false;
           this.importText = '';
+          this.schemaUrl = '';
         },
-        doImport() {
+        async doImport() {
+          if (this.schemaUrl) {
             try {
-                const lines = this.importText.split('\n');
-                const newTables = [];
-                const newRelationships = [];
-                let currentTable = null;
-
-                lines.forEach(line => {
-                    line = line.trim();
-
-                    if (line.startsWith('create_table')) {
-                        const tableName = line.match(/"([^"]+)"/)[1];
-                        currentTable = { name: tableName, columns: [] };
-                        newTables.push(currentTable);
-                    } else if (line.startsWith('t.')) {
-                        const columnMatches = line.match(/t\.(\w+) "(\w+)"/);
-                        if (columnMatches) {
-                            const [, type, name] = columnMatches;
-                            currentTable.columns.push({ name, type });
-                        }
-                    } else if (line.startsWith('add_foreign_key')) {
-                        const fkMatches = line.match(/add_foreign_key "([^"]+)", "([^"]+)"(?:, column: "([^"]+)")?/);
-                        if (fkMatches) {
-                            const [, fromTable, toTable, column] = fkMatches;
-                            const fkColumn = column ? column : `${toTable.slice(0, -1)}_id`; // Default to convention `tablename_id` if column not specified
-
-                            newRelationships.push({
-                                from: { table: toTable, column: 'id' }, // references `id` in the table it points to
-                                to: { table: fromTable, column: fkColumn } // the actual column in fromTable
-                            });
-
-                            const fromTableObject = newTables.find(t => t.name === fromTable);
-                            if (fromTableObject) {
-                                const columnObject = fromTableObject.columns.find(c => c.name === fkColumn);
-                                if (columnObject) {
-                                    columnObject.foreignKey = true;
-                                    columnObject.references = { table: toTable, column: 'id' };
-                                }
-                            }
-                        }
-                    }
-                });
-
-                this.tables = newTables;
-                this.relationships = newRelationships;
-                this.showImportArea = false;
-                this.importText = '';
+              const response = await fetch(this.schemaUrl);
+              if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+              }
+              this.importText = await response.text();
             } catch (error) {
-                console.error("Import failed: ", error);
+              console.error(`Failed to fetch schema: ${error}`);
+              return;
             }
+          }
+
+          if (!this.importText) {
+            console.error("No schema text available for import.");
+            return;
+          }
+
+          try {
+            const lines = this.importText.split('\n');
+            const newTables = [];
+            const newRelationships = [];
+            let currentTable = null;
+
+            lines.forEach(line => {
+              line = line.trim();
+
+              if (line.startsWith('create_table')) {
+                const tableName = line.match(/"([^"]+)"/)[1];
+                currentTable = { name: tableName, columns: [] };
+                newTables.push(currentTable);
+              } else if (line.startsWith('t.')) {
+                const columnMatches = line.match(/t\.(\w+) "(\w+)"/);
+                if (columnMatches) {
+                  const [, type, name] = columnMatches;
+                  currentTable.columns.push({ name, type });
+                }
+              } else if (line.startsWith('add_foreign_key')) {
+                const fkMatches = line.match(/add_foreign_key "([^"]+)", "([^"]+)"(?:, column: "([^"]+)")?/);
+                if (fkMatches) {
+                  const [, fromTable, toTable, column] = fkMatches;
+                  const fkColumn = column ? column : `${toTable.slice(0, -1)}_id`;
+
+                  newRelationships.push({
+                    from: { table: toTable, column: 'id' },
+                    to: { table: fromTable, column: fkColumn }
+                  });
+
+                  const fromTableObject = newTables.find(t => t.name === fromTable);
+                  if (fromTableObject) {
+                    const columnObject = fromTableObject.columns.find(c => c.name === fkColumn);
+                    if (columnObject) {
+                      columnObject.foreignKey = true;
+                      columnObject.references = { table: toTable, column: 'id' };
+                    }
+                  }
+                }
+              }
+            });
+
+            this.tables = newTables;
+            this.relationships = newRelationships;
+            this.showImportArea = false;
+            this.importText = '';
+            this.schemaUrl = '';
+          } catch (error) {
+            console.error("Import failed: ", error);
+          }
         }
       }
     });
